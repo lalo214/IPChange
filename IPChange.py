@@ -13,16 +13,16 @@ def change_ip():
     mask = input('Enter subnet mask (x.x.x.x): ')
     new_ip = input('Enter first new IP to be created: ')
 
+    # new_ip is split to separate subnet from unique address
+    new_ip_list = new_ip.split('.')
+    subnet = '.'.join(new_ip_list[0:3])
+    incremented_ip = int(new_ip_list[3])
+
     # need loop for exception handling
     login_invalid = True
     while login_invalid:
         username = input('Enter username: ')
         password = getpass()
-
-        # new_ip is split to separate subnet from unique address
-        new_ip_list = new_ip.split('.')
-        subnet = '.'.join(new_ip_list[0:3])
-        incremented_ip = int(new_ip_list[3])
 
         # iterate through list of IPs to SSH to each one
         for i in range(len(ip_list)):
@@ -31,7 +31,7 @@ def change_ip():
             try:
                 remote_conn_pre = paramiko.SSHClient()
                 remote_conn_pre.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                remote_conn_pre.connect(ip, timeout=3, port=22, username=username, password=password,
+                remote_conn_pre.connect(ip, timeout=5, port=22, username=username, password=password,
                                         look_for_keys=False, allow_agent=False)
             except paramiko.AuthenticationException:
                 print("Authentication failed. Please verify credentials: ")
@@ -39,10 +39,12 @@ def change_ip():
 
             except paramiko.SSHException:
                 print("Unable to establish SSH connection to:", ip)
+                incremented_ip += 1
                 continue
             # exception required for timeout errors
             except socket.error:
-                print("Unable to establish SSH connection to:", ip)
+                print("Timeout. Unable to establish SSH connection to:", ip)
+                incremented_ip += 1
                 continue
 
             login_invalid = False
@@ -53,11 +55,12 @@ def change_ip():
             remote_conn.send("int vlan 1\n")
             remote_conn.send('ip add' + ' ' + subnet + '.' + str(incremented_ip) + ' ' + mask + '\n')
 
+            print(subnet + '.' + str(incremented_ip), file=open('newIPs.txt', 'a'))
+            print(ip, 'changed to', subnet + '.' + str(incremented_ip))
             incremented_ip += 1
             time.sleep(.5)
-            output = remote_conn.recv(65535).decode('utf-8')
-            # print(ip, 'changed to', subnet + '.' + str(incremented_ip), file=open('newIPs.txt', 'a'))
-            # need to print new and old IP to verify change
+            # output = remote_conn.recv(65535).decode('utf-8')
+
 
 
 # SSH into new management IP to change default gateway
@@ -79,7 +82,7 @@ def change_gateway(gateway):
             try:
                 remote_conn_pre = paramiko.SSHClient()
                 remote_conn_pre.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                remote_conn_pre.connect(ip, timeout=3, port=22, username=username, password=password,
+                remote_conn_pre.connect(ip, timeout=9, port=22, username=username, password=password,
                                         look_for_keys=False, allow_agent=False)
             except paramiko.AuthenticationException:
                 print("Authentication failed. Please verify credentials: ")
@@ -98,15 +101,15 @@ def change_gateway(gateway):
             # commands sent to CLI
             remote_conn.send("en\n")
             remote_conn.send("conf t\n")
-            remote_conn.send('ip default-gateway' + ' ' + gateway + '\n')
+            remote_conn.send('ip default-gateway ' + gateway + '\n')
             remote_conn.send("exit\n")
             remote_conn.send("wr mem\n")
 
             time.sleep(.5)
-            output = remote_conn.recv(65535).decode('utf-8')
-            # print output to verify
+            # output = remote_conn.recv(65535).decode('utf-8')
+            
 
 
 change_ip()
-new_gateway = input('Enter the gateway:')
+new_gateway = input('Enter the new gateway:')
 change_gateway(new_gateway)
